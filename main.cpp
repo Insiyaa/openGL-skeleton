@@ -3,6 +3,8 @@
 #include <GLFW/glfw3.h>
 #include <string.h>
 #include <stdio.h>
+#include <fstream>
+
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -17,59 +19,120 @@ const float toRadians = 3.14159265f / 180.0f;
 GLuint  VAO,
         VBO,
         shader,
+        IBO,
         //uniformXMove;
-        uniformModel;
+        uniformModel,
+        uniformProjection;
 
-bool direction = true;
+bool direction = true,
+     sizeDirection = true;
 float triOffset = 0.0f,
       triMaxOffset = 0.7f, // at this offset, we'll switch direction
       triIncrement = 0.005f,
-      curAngle = 0.0f;
+      curAngle = 0.0f,
+      curSize = 0.4f,
+      maxSize = 0.8f,
+      minSize = 0.1f;
+
+static const char* LoadShader(const std::string& fileName)
+{
+    std::ifstream file;
+    file.open((fileName).c_str());
+
+    std::string output;
+    std::string line;
+
+    if(file.is_open())
+    {
+        while(file.good())
+        {
+            getline(file, line);
+			output.append(line + "\n");
+        }
+    }
+    else
+    {
+		std::cerr << "Unable to load shader: " << fileName << std::endl;
+    }
+
+    return output.c_str();
+}
+
 
 // Vertex Shader
+//static const char* dummy1 = LoadShader("./res/basicShader.vs");
 static const char* vShader = "                                           \n\
 #version 330                                                             \n\
                                                                          \n\
 layout (location = 0) in vec3 pos;                                       \n\
+                                                                         \n\
+out vec4 vCol;                                                           \n\
+                                                                         \n\
 uniform mat4 model;                                                      \n\
+uniform mat4 projection;                                                 \n\
+                                                                         \n\
 void main()                                                              \n\
 {                                                                        \n\
-    gl_Position = model * vec4(0.4 * pos.x, 0.4 * pos.y, pos.z, 1.0f);   \n\
+    gl_Position = projection * model * vec4(pos, 1.0f);                  \n\
+    //clamp to bring vertex values in 0 to 1                             \n\
+    vCol = vec4(clamp(pos, 0.0f, 1.0f), 1.0f);                           \n\
 }";
 
 // Fragment Shader
+//static const char* dummy = LoadShader("./res/basicShader.fs");
 static const char* fShader = "                                           \n\
 #version 330                                                             \n\
                                                                          \n\
+in vec4 vCol;                                                            \n\
 out vec4 colors;                                                         \n\
+                                                                         \n\
 void main()                                                              \n\
 {                                                                        \n\
-    colors = vec4(1.0f, 0.0f, 0.0f, 1.0f);                               \n\
+    colors = vCol;                                                       \n\
 }";
+
 
 void CreateTriangle()
 {
+    // 4 sides of the pyramid
+    unsigned int indices[] = {
+        0, 3, 1,
+        1, 3, 2,
+        2, 3, 0,
+        0, 1, 2
+    };
+
+
     //x, y, z for each vertex
     // center of the screen is 0, 0
     // max values swing from 1 to -1
 
     GLfloat vertices[] = {
         -1.0f, -1.0f, 0.0f,
-        1.0f, -1.0f, 0.0f,
-        0.0f, 1.0f, 0.0f
+         0.0f, -1.0f, 1.0f,
+         1.0f, -1.0f, 0.0f,
+         0.0f, 1.0f, 0.0f
     };
 
     glGenVertexArrays(1, &VAO);
     glBindVertexArray(VAO);
 
+        glGenBuffers(1, &IBO);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IBO);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
         glGenBuffers(1, &VBO);
         glBindBuffer(GL_ARRAY_BUFFER, VBO);
+
             glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
             glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
             glEnableVertexAttribArray(0);
 
+        // unbinding
         glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
     glBindVertexArray(0);
 
 
@@ -140,6 +203,7 @@ void CompileShaders()
     // get uniform variable ID
     //uniformXMove = glGetUniformLocation(shader, "xMove");
     uniformModel = glGetUniformLocation(shader, "model");
+    uniformProjection = glGetUniformLocation(shader, "projection");
 }
 
 int main()
@@ -190,11 +254,20 @@ int main()
         return 1;
     }
 
+    // which triangle to draw over top of the other
+    glEnable(GL_DEPTH_TEST);
+
     // setup viewport size
     glViewport(0, 0, bufferWidth, bufferHeight);
 
     CreateTriangle();
     CompileShaders();
+
+    // fov: using standard. It is the field of view in the y direction
+    // aspect: width of window divided by the height of window
+    // nearest thing you can see
+    // farthest thing you can see
+    glm::mat4 projection = glm::perspective(45.0f, (GLfloat)bufferWidth / (GLfloat)bufferHeight, 0.1f, 100.0f);
 
     // loop until window closed
     while (!glfwWindowShouldClose(mainWindow))
@@ -217,10 +290,22 @@ int main()
             curAngle -= 360;
         }
 
+        if(direction)
+        {
+            curSize += 0.001f;
+        } else {
+            curSize -= 0.001f;
+        }
+
+        if(curSize >= maxSize || curSize <= minSize)
+        {
+            sizeDirection = !sizeDirection;
+        }
+
 
         // clear window
         glClearColor(0.0f, 0.0f, 0.0f, 0.1f);
-        glClear(GL_COLOR_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUseProgram(shader);
 
@@ -231,15 +316,23 @@ int main()
             glm::mat4 model = glm::mat4(1.0);
 
             // rotate about z-axis
-            model = glm::rotate(model, curAngle * toRadians, glm::vec3(0.0f, 0.0f, 1.0f));
-            model = glm::translate(model, glm::vec3(triOffset, triOffset, 0.0f));
+            //model = glm::rotate(model, curAngle * toRadians, glm::vec3(0.0f, 1.0f, 0.0f));
+            //model = glm::translate(model, glm::vec3(triOffset, triOffset, 0.0f));
+            //model = glm::scale(model, glm::vec3(curSize, curSize, 1.0f));
 
+            model = glm::translate(model, glm::vec3(triOffset, triOffset, -2.5f));
+            //model = glm::rotate(model, curAngle * toRadians, glm::vec3(0.0f, 1.0f, 0.0f));
+            model = glm::scale(model, glm::vec3(0.4f, 0.4f, 1.0f));
 
 
             glUniformMatrix4fv(uniformModel, 1, GL_FALSE, glm::value_ptr(model));
+            glUniformMatrix4fv(uniformProjection, 1, GL_FALSE, glm::value_ptr(projection));
 
             glBindVertexArray(VAO);
-                glDrawArrays(GL_TRIANGLES, 0, 3);
+                //glDrawArrays(GL_TRIANGLES, 0, 3);
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IBO);
+                    glDrawElements(GL_TRIANGLES, 12, GL_UNSIGNED_INT, 0);
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
             glBindVertexArray(0);
 
         // unassign shader;
