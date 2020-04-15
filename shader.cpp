@@ -1,117 +1,119 @@
 #include "shader.h"
-#include <iostream>
-#include <fstream>
 
-
-// helper functions for I/O
-// Load files off the harddrive
-static std::string LoadShader(const std::string& fileName);
-// gives error msgs
-void CheckShaderError(GLuint shader, GLuint flag, bool isProgram, const std::string& errorMessage);
-static GLuint CreateShader(const std::string& text, GLenum shaderType);
-
-
-Shader::Shader(const std::string& fileName)
+Shader::Shader()
 {
-    m_program = glCreateProgram();
-    // vertex shader
-    m_shaders[0] = CreateShader(LoadShader(fileName + ".vs"), GL_VERTEX_SHADER);
-    // fragment shader
-    m_shaders[1] = CreateShader(LoadShader(fileName + ".fs"), GL_FRAGMENT_SHADER);
-    // no standard for file ext, you can keep anything
+    shaderID = 0;
+    uniformModel = 0;
+    uniformProjection = 0;
+}
 
-    // add shaders to the shader program
-    for (unsigned int i=0; i < NUM_SHADER; i++)
-        glAttachShader(m_program, m_shaders[i]);
+void Shader::CreateFromString(const char* vertexCode, const char* fragmentCode)
+{
+    CompileShaders(vertexCode, fragmentCode);
+}
 
-    // what part of data to read
-    glBindAttribLocation(m_program, 0, "position");
+void Shader::CompileShaders(const char* vertexCode, const char* fragmentCode)
+{
+    shaderID =  glCreateProgram();
 
-    // link and validate shader
-    glLinkProgram(m_program);
-    CheckShaderError(m_program, GL_LINK_STATUS, true, "Error: Program linking failed.");
+    if (!shaderID)
+    {
+        std::cerr << "Error creating shader!\n";
+        return;
+    }
 
-    glValidateProgram(m_program);
-    CheckShaderError(m_program, GL_VALIDATE_STATUS, true, "Error: Program is invalid.");
+    AddShader(shaderID, vertexCode, GL_VERTEX_SHADER);
+    AddShader(shaderID, fragmentCode, GL_FRAGMENT_SHADER);
 
+    GLint result = 0;
+    GLchar eLog[1024] = { 0 };
 
+    glLinkProgram(shaderID);
+    glGetProgramiv(shaderID, GL_LINK_STATUS, &result);
+
+    if (!result)
+    {
+        glGetProgramInfoLog(shaderID, sizeof(eLog), NULL, eLog);
+        std::cerr << "Error Linking: " << eLog << std::endl;
+        return;
+    }
+
+    glValidateProgram(shaderID);
+    glGetProgramiv(shaderID, GL_VALIDATE_STATUS, &result);
+
+    if (!result)
+    {
+        glGetProgramInfoLog(shaderID, sizeof(eLog), NULL, eLog);
+        std::cerr << "Error Validating: " << eLog << std::endl;
+        return;
+    }
+
+    // get uniform variable ID
+    uniformModel = glGetUniformLocation(shaderID, "model");
+    uniformProjection = glGetUniformLocation(shaderID, "projection");
+}
+
+void Shader::AddShader(GLuint theProgram, const char* shaderCode, GLenum shaderType)
+{
+    GLuint theShader = glCreateShader(shaderType);
+    const GLchar* theCode[1];
+    theCode[0] = shaderCode;
+
+    GLint codeLength[1];
+    codeLength[0] = strlen(shaderCode);
+
+    glShaderSource(theShader, 1, theCode, codeLength);
+    glCompileShader(theShader);
+
+    GLint result = 0;
+    GLchar eLog[1024] = { 0 };
+
+    glGetShaderiv(theShader, GL_COMPILE_STATUS, &result);
+
+    if (!result)
+    {
+        glGetShaderInfoLog(theShader, sizeof(eLog), NULL, eLog);
+        std::cerr << "Error Compiling: " << shaderType << eLog << std::endl;
+        return;
+    }
+    glAttachShader(theProgram, theShader);
+}
+
+void Shader::UseShader()
+{
+    glUseProgram(shaderID);
+}
+
+std::string Shader::ReadShaderCodeFromFile(const char* shaderPath)
+{
+	std::string code;
+	std::ifstream shaderFile;
+	shaderFile.exceptions(std::ifstream::badbit);
+	try
+	{
+		shaderFile.open(shaderPath);
+		std::stringstream shaderStream;
+		shaderStream << shaderFile.rdbuf();
+		shaderFile.close();
+		code = shaderStream.str();
+	}
+	catch (std::ifstream::failure e)
+	{
+		std::cout << "Shader file " << shaderPath << " cannot be read" << std::endl;
+	}
+
+	return code;
+}
+
+void Shader::CreateFromFiles(const char* vShader, const char* fShader)
+{
+	std::string vShaderCode = ReadShaderCodeFromFile(vShader);
+	std::string fShaderCode = ReadShaderCodeFromFile(fShader);
+
+	CompileShaders(vShaderCode.c_str(), fShaderCode.c_str());
 }
 
 Shader::~Shader()
 {
-    for (unsigned int i=0; i < NUM_SHADER; i++)
-    {
-        glDetachShader(m_program, m_shaders[i]);
-        glDeleteShader(m_shaders[i]);
-    }
-    glDeleteProgram(m_program);
-}
-
-void Shader::Bind()
-{
-    glUseProgram(m_program);
-}
-
-static GLuint CreateShader(const std::string& text, GLenum shaderType)
-{
-    GLuint shader =  glCreateShader(shaderType);
-    if (shader == 0)
-        std::cerr << "Error: shader creation failed" << std::endl;
-    const GLchar* shaderSourceStrings[1];
-    shaderSourceStrings[0] = text.c_str();
-    GLint shaderSourceLengths[1];
-
-    shaderSourceLengths[0] = text.length();
-
-    glShaderSource(shader, 1, shaderSourceStrings, shaderSourceLengths);
-    glCompileShader(shader);
-
-    CheckShaderError(shader, GL_COMPILE_STATUS, false, "Error: Shader compilation failed.");
-
-    return shader;
-}
-
-static std::string LoadShader(const std::string& fileName)
-{
-    std::ifstream file;
-    file.open((fileName).c_str());
-
-    std::string output;
-    std::string line;
-
-    if(file.is_open())
-    {
-        while(file.good())
-        {
-            getline(file, line);
-			output.append(line + "\n");
-        }
-    }
-    else
-    {
-		std::cerr << "Unable to load shader: " << fileName << std::endl;
-    }
-
-    return output;
-}
-
-void CheckShaderError(GLuint shader, GLuint flag, bool isProgram, const std::string& errorMessage)
-{
-    GLint success = 0;
-    GLchar error[1024] = { 0 };
-
-    if(isProgram)
-        glGetProgramiv(shader, flag, &success);
-    else
-        glGetShaderiv(shader, flag, &success);
-
-    if(success == GL_FALSE)
-    {
-        if(isProgram)
-            glGetProgramInfoLog(shader, sizeof(error), NULL, error);
-        else
-            glGetShaderInfoLog(shader, sizeof(error), NULL, error);
-
-        std::cerr << errorMessage << ": '" << error << "'" << std::endl;
-    }
+    //dtor
 }

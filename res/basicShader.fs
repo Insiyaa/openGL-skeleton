@@ -1,6 +1,10 @@
-#version 120
+#version 330
 
-void main()
+in vec4 vCol;
+
+out vec4 colour;
+
+void main()	
 {
-	gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+	colour = vCol;
 }
