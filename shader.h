@@ -25,6 +25,10 @@ class Shader
         {
             return this->uniformModel;
         }
+        GLuint GetViewLocation()
+        {
+            return this->uniformView;
+        }
 
         void UseShader();
 
@@ -35,7 +39,7 @@ class Shader
     protected:
 
     private:
-        GLuint shaderID, uniformProjection, uniformModel;
+        GLuint shaderID, uniformProjection, uniformModel, uniformView;
 
         std::string ReadShaderCodeFromFile(const char* shaderPath);
 

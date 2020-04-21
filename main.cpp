@@ -15,6 +15,7 @@
 #include <mesh.h>
 #include <shader.h>
 #include <window.h>
+#include <camera.h>
 
 using namespace std;
 
@@ -22,7 +23,12 @@ const float toRadians = 3.14159265f / 180.0f;
 
 vector<Mesh*> meshList;
 vector<Shader> shaderList;
-Window mainWindow = Window(1000, 700);
+Window mainWindow;
+
+Camera camera;
+
+GLfloat deltaTime = 0.0f;
+GLfloat lastTime = 0.0f;
 
 // Vertex Shader
 static const char* vShader = "res/basicShader.vs";
@@ -79,12 +85,15 @@ void CreateShaders()
 
 int main()
 {
-
+    mainWindow = Window(800, 600);
     mainWindow.initialize();
+
     CreateObjects();
     CreateShaders();
 
-    GLuint uniformModel, uniformProjection;
+    camera = Camera(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), -90.0f, 0.1f, 3.0f, 0.5f);
+
+    GLuint uniformModel, uniformProjection, uniformView;
 
     // fov: using standard. It is the field of view in the y direction
     // aspect: width of window divided by the height of window
@@ -95,8 +104,15 @@ int main()
     // loop until window closed
     while (!mainWindow.GetShouldClose())
     {
+        GLfloat now = glfwGetTime(); // SDL_GetPerformanceCounter();
+        deltaTime = now - lastTime;  // (now-lastTime)/SDL_GetPerformanceFrequency(); --> gives time in mili secs
+        lastTime = now;
+
         // get and handle user input events
         glfwPollEvents();
+
+        camera.KeyControls(mainWindow.GetKeys(), deltaTime);
+        camera.MouseControl(mainWindow.GetXChange(), mainWindow.GetYChange());
 
         if (direction)
         {
@@ -133,8 +149,7 @@ int main()
         shaderList[0].UseShader();
 		uniformModel = shaderList[0].GetModelLocation();
 		uniformProjection = shaderList[0].GetProjectionLocation();
-
-
+		uniformView = shaderList[0].GetViewLocation();
 
 
             // Order matters. What is you see happens from bottom to top.
@@ -147,26 +162,27 @@ int main()
             //model = glm::translate(model, glm::vec3(triOffset, triOffset, 0.0f));
             //model = glm::scale(model, glm::vec3(curSize, curSize, 1.0f));
 
-            model = glm::translate(model, glm::vec3(triOffset, triOffset, -2.5f));
+            //model = glm::translate(model, glm::vec3(triOffset, triOffset, -2.5f));
             //model = glm::rotate(model, curAngle * toRadians, glm::vec3(0.0f, 1.0f, 0.0f));
             model = glm::scale(model, glm::vec3(0.4f, 0.4f, 1.0f));
 
 
             glUniformMatrix4fv(uniformModel, 1, GL_FALSE, glm::value_ptr(model));
             glUniformMatrix4fv(uniformProjection, 1, GL_FALSE, glm::value_ptr(projection));
+            glUniformMatrix4fv(uniformView, 1, GL_FALSE, glm::value_ptr(camera.CalculateViewMatrix()));
 
             meshList[0]->RenderMesh();
 
             model = glm::mat4(1.0);
 
-            model = glm::translate(model, glm::vec3(-triOffset, triOffset, -2.5f));
+            //model = glm::translate(model, glm::vec3(-triOffset, triOffset, -2.5f));
             model = glm::scale(model, glm::vec3(0.4f, 0.4f, 1.0f));
 
 
             glUniformMatrix4fv(uniformModel, 1, GL_FALSE, glm::value_ptr(model));
             //glUniformMatrix4fv(uniformProjection, 1, GL_FALSE, glm::value_ptr(projection));
 
-            meshList[1]->RenderMesh();
+            //meshList[1]->RenderMesh();
 
         // unassign shader;
         glUseProgram(0);

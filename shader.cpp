@@ -51,6 +51,7 @@ void Shader::CompileShaders(const char* vertexCode, const char* fragmentCode)
     // get uniform variable ID
     uniformModel = glGetUniformLocation(shaderID, "model");
     uniformProjection = glGetUniformLocation(shaderID, "projection");
+    uniformView = glGetUniformLocation(shaderID, "view");
 }
 
 void Shader::AddShader(GLuint theProgram, const char* shaderCode, GLenum shaderType)
@@ -88,7 +89,7 @@ std::string Shader::ReadShaderCodeFromFile(const char* shaderPath)
 {
 	std::string code;
 	std::ifstream shaderFile;
-	shaderFile.exceptions(std::ifstream::badbit);
+	shaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
 	try
 	{
 		shaderFile.open(shaderPath);
